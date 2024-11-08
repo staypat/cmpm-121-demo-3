@@ -43,6 +43,17 @@ h1 {
   padding: 1rem;
 }
 
+#inventoryPanel {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  flex-wrap: wrap;
+  height: 275px;
+  gap: 5px;
+  max-width: 100%;
+  overflow-y: auto;
+}
+
 #map {
   width: 100%;
   height: 80vh;
