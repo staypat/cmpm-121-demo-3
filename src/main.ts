@@ -48,6 +48,25 @@ const inventoryPanel = document.querySelector<HTMLDivElement>(
 )!;
 inventoryPanel.innerHTML = "Inventory:<br>Nothing collected yet";
 
+function updateInventoryPanel() {
+  inventoryPanel.innerHTML = `Inventory: ${
+    playerCoins.map((coin) =>
+      `<div><span class="coin-link" data-i="${coin.cell.i}" data-j="${coin.cell.j}">Coin {i: ${coin.cell.i}, j: ${coin.cell.j}, serial: ${coin.serialNumber}}</span></div>`
+    ).join("")
+  }`;
+
+  // Event listeners for coin links to center map on coin's home cache
+  const coinLinks = inventoryPanel.querySelectorAll(".coin-link");
+  coinLinks.forEach((link) => {
+    link.addEventListener("click", () => {
+      const i = Number(link.getAttribute("data-i"));
+      const j = Number(link.getAttribute("data-j"));
+      const latLng = leaflet.latLng(i * TILE_DEGREES, j * TILE_DEGREES);
+      map.setView(latLng, GAMEPLAY_ZOOM_LEVEL);
+    });
+  });
+}
+
 // Player's collected coins
 const playerCoins: Coin[] = [];
 
@@ -154,14 +173,6 @@ function spawnCache(cell: Cell) {
         .length.toString();
     }
 
-    function updateInventoryPanel() {
-      inventoryPanel.innerHTML = `Inventory: ${
-        playerCoins.map((coin) =>
-          `<div>Coin {i: ${coin.cell.i}, j: ${coin.cell.j}, serial: ${coin.serialNumber}}</div>`
-        ).join("")
-      }`;
-    }
-
     // Deposit coin functionality
     const depositButton = document.createElement("button");
     depositButton.innerHTML = "Deposit";
@@ -218,7 +229,7 @@ function updateVisibleCaches() {
   });
 }
 
-// Function to move player
+// Player move
 function movePlayer(direction: "up" | "down" | "left" | "right") {
   switch (direction) {
     case "up":
@@ -234,11 +245,19 @@ function movePlayer(direction: "up" | "down" | "left" | "right") {
       playerPosition = { i: playerPosition.i, j: playerPosition.j + 1 };
       break;
   }
+
+  const newLatLng = leaflet.latLng(
+    playerPosition.i * TILE_DEGREES,
+    playerPosition.j * TILE_DEGREES,
+  );
+  positionHistory.push(newLatLng);
+
   updatePlayerMarker();
   updateVisibleCaches();
+  updatePlayerPath();
 }
 
-// Add event listeners to buttons
+// Directional button event listeners
 document.getElementById("north")!.addEventListener(
   "click",
   () => movePlayer("up"),
@@ -257,3 +276,109 @@ document.getElementById("east")!.addEventListener(
 );
 updatePlayerMarker();
 updateVisibleCaches();
+
+// Geolocation tracking
+let geoWatchId: number | null = null;
+
+function toggleGeolocation() {
+  const button = document.getElementById("geolocation")!;
+  if (geoWatchId === null) {
+    // Start geolocation tracking
+    button.innerHTML = "🌐 (On)";
+    geoWatchId = navigator.geolocation.watchPosition(
+      (position) => {
+        playerPosition = board.getCellForPoint(
+          leaflet.latLng(position.coords.latitude, position.coords.longitude),
+        );
+        updatePlayerMarker();
+        updateVisibleCaches();
+      },
+      (error) => {
+        console.error("Geolocation error:", error);
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 10000,
+        timeout: 5000,
+      },
+    );
+  } else {
+    // Stop geolocation tracking
+    button.innerHTML = "🌐 (Off)";
+    navigator.geolocation.clearWatch(geoWatchId);
+    geoWatchId = null;
+  }
+}
+
+// Geolocation event listener
+document.getElementById("geolocation")!.addEventListener(
+  "click",
+  toggleGeolocation,
+);
+
+// Game state data
+function saveGameState() {
+  const gameState = {
+    playerPosition,
+    playerCoins,
+    cacheMementos: Array.from(cacheMementos.entries()),
+  };
+  localStorage.setItem("gameState", JSON.stringify(gameState));
+}
+
+function loadGameState() {
+  const gameStateJSON = localStorage.getItem("gameState");
+  if (gameStateJSON) {
+    const gameState = JSON.parse(gameStateJSON);
+
+    playerPosition = gameState.playerPosition;
+
+    playerCoins.length = 0;
+    playerCoins.push(...gameState.playerCoins);
+
+    cacheMementos.clear();
+    gameState.cacheMementos.forEach(([key, value]: [string, string]) => {
+      cacheMementos.set(key, value);
+    });
+
+    updatePlayerMarker();
+    updateVisibleCaches();
+    updateInventoryPanel();
+  }
+}
+
+document.addEventListener("DOMContentLoaded", loadGameState);
+globalThis.addEventListener("beforeunload", saveGameState);
+
+// Track player position
+const positionHistory: leaflet.LatLng[] = [];
+const playerPath: leaflet.Polyline = leaflet.polyline([], { color: "red" })
+  .addTo(map);
+
+function updatePlayerPath() {
+  playerPath.setLatLngs(positionHistory);
+}
+
+// Reset game state
+function resetGameState() {
+  const confirmReset = prompt("Type 'yes' to confirm game reset");
+  if (confirmReset !== "yes") {
+    return;
+  }
+  // Reset player position
+  playerPosition = board.getCellForPoint(OAKES_CLASSROOM);
+  updatePlayerMarker();
+
+  // Clear player and cache information
+  playerCoins.length = 0;
+  updateInventoryPanel();
+  positionHistory.length = 0;
+  playerPath.setLatLngs([]);
+  cacheMementos.clear();
+
+  updateVisibleCaches();
+  localStorage.removeItem("gameState");
+}
+
+// Reset game state event listener
+document.getElementById("reset")!.addEventListener("click", resetGameState);
