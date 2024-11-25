@@ -11,6 +11,8 @@ import luck from "./luck.ts";
 import { Board } from "./board.ts";
 import { Cell } from "./board.ts";
 
+import { updateInventoryPanel } from "./uiManager.ts";
+
 // Gameplay parameters
 const OAKES_CLASSROOM = leaflet.latLng(36.9895, -122.0628);
 const GAMEPLAY_ZOOM_LEVEL = 19;
@@ -47,25 +49,6 @@ const inventoryPanel = document.querySelector<HTMLDivElement>(
   "#inventoryPanel",
 )!;
 inventoryPanel.innerHTML = "Inventory:<br>Nothing collected yet";
-
-function updateInventoryPanel() {
-  inventoryPanel.innerHTML = `Inventory: ${
-    playerCoins.map((coin) =>
-      `<div><span class="coin-link" data-i="${coin.cell.i}" data-j="${coin.cell.j}">Coin {i: ${coin.cell.i}, j: ${coin.cell.j}, serial: ${coin.serialNumber}}</span></div>`
-    ).join("")
-  }`;
-
-  // Event listeners for coin links to center map on coin's home cache
-  const coinLinks = inventoryPanel.querySelectorAll(".coin-link");
-  coinLinks.forEach((link) => {
-    link.addEventListener("click", () => {
-      const i = Number(link.getAttribute("data-i"));
-      const j = Number(link.getAttribute("data-j"));
-      const latLng = leaflet.latLng(i * TILE_DEGREES, j * TILE_DEGREES);
-      map.setView(latLng, GAMEPLAY_ZOOM_LEVEL);
-    });
-  });
-}
 
 // Player's collected coins
 const playerCoins: Coin[] = [];
@@ -158,7 +141,12 @@ function spawnCache(cell: Cell) {
               playerCoins.push(coin);
               cache.coins.splice(coinIndex, 1);
               updatePopupValue();
-              updateInventoryPanel();
+              updateInventoryPanel(
+                playerCoins,
+                TILE_DEGREES,
+                map,
+                GAMEPLAY_ZOOM_LEVEL,
+              );
               this.disabled = true;
               cacheMementos.set(cacheKey, cache.toMemento());
             }
@@ -181,7 +169,12 @@ function spawnCache(cell: Cell) {
         const depositCoin = playerCoins.pop();
         cache.coins.push(depositCoin!);
         updatePopupValue();
-        updateInventoryPanel();
+        updateInventoryPanel(
+          playerCoins,
+          TILE_DEGREES,
+          map,
+          GAMEPLAY_ZOOM_LEVEL,
+        );
         updateCoinList();
         cacheMementos.set(cacheKey, cache.toMemento());
       }
@@ -343,7 +336,7 @@ function loadGameState() {
 
     updatePlayerMarker();
     updateVisibleCaches();
-    updateInventoryPanel();
+    updateInventoryPanel(playerCoins, TILE_DEGREES, map, GAMEPLAY_ZOOM_LEVEL);
   }
 }
 
@@ -371,7 +364,7 @@ function resetGameState() {
 
   // Clear player and cache information
   playerCoins.length = 0;
-  updateInventoryPanel();
+  updateInventoryPanel(playerCoins, TILE_DEGREES, map, GAMEPLAY_ZOOM_LEVEL);
   positionHistory.length = 0;
   playerPath.setLatLngs([]);
   cacheMementos.clear();
