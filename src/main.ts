@@ -12,6 +12,7 @@ import { Board } from "./board.ts";
 import { Cell } from "./board.ts";
 
 import { updateInventoryPanel } from "./uiManager.ts";
+import { LeafletMapProvider, MapProvider } from "./mapProvider.ts";
 
 // Gameplay parameters
 const OAKES_CLASSROOM = leaflet.latLng(36.9895, -122.0628);
@@ -33,16 +34,19 @@ const map = leaflet.map(document.getElementById("map")!, {
   scrollWheelZoom: false,
 });
 
-// Background tile layer
-leaflet.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  maxZoom: 19,
-  attribution:
-    '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-}).addTo(map);
+const leafletMapProvider = new LeafletMapProvider(map);
 
-const playerMarker = leaflet.marker(OAKES_CLASSROOM);
-playerMarker.bindTooltip("You are here!");
-playerMarker.addTo(map);
+// Background tile layer
+leafletMapProvider.addTileLayer(
+  "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+  {
+    maxZoom: 19,
+    attribution:
+      '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  },
+);
+
+leafletMapProvider.addMarker("player", OAKES_CLASSROOM, "You are here!");
 
 // Inventory UI
 const inventoryPanel = document.querySelector<HTMLDivElement>(
@@ -92,7 +96,7 @@ function generateCoins(cell: Cell, count: number): Coin[] {
 }
 
 // Add caches to the map by cell numbers
-function spawnCache(cell: Cell) {
+function spawnCache(cell: Cell, mapProvider: MapProvider) {
   const bounds = board.getCellBounds(cell);
   const cacheKey = `${cell.i}-${cell.j}`;
   let cache: Cache;
@@ -109,12 +113,8 @@ function spawnCache(cell: Cell) {
     cacheMementos.set(cacheKey, cache.toMemento());
   }
 
-  // Cache visual representation
-  const rect = leaflet.rectangle(bounds);
-  rect.addTo(map);
-
-  // Cache event handler
-  rect.bindPopup(() => {
+  // Decoupled: Use MapProvider to add the rectangle and bind the popup
+  mapProvider.addRectangle(bounds, () => {
     const popupDiv = document.createElement("div");
     popupDiv.innerHTML =
       `<div>There is a cache here at "${cell.i},${cell.j}".<br><br> There are <span id="value">${cache.coins.length}</span> coins to collect.<br><br>`;
@@ -194,7 +194,7 @@ function updatePlayerMarker() {
     playerPosition.i * TILE_DEGREES,
     playerPosition.j * TILE_DEGREES,
   );
-  playerMarker.setLatLng(newLatLng);
+  leafletMapProvider.updateMarker("player", newLatLng);
   map.setView(newLatLng, GAMEPLAY_ZOOM_LEVEL);
 }
 
@@ -217,7 +217,7 @@ function updateVisibleCaches() {
   // Display or update caches based on player position
   nearbyCells.forEach((cell) => {
     if (luck([cell.i, cell.j].toString()) < CACHE_SPAWN_PROBABILITY) {
-      spawnCache(cell);
+      spawnCache(cell, leafletMapProvider);
     }
   });
 }
